@@ -607,6 +607,12 @@ if(state.debug){
     var path_en = path_up.enter().append("g")
         .attr("class", "arc-group");
 
+    //give each new path a personalized class
+    path_en.each(function(d) {
+        if(d.class!=undefined)
+            this.classList.add(d.class);
+      });
+
     // add new paths
     // draw the new line/edges
     if(settings.edge.shape!="curve"){
@@ -820,7 +826,8 @@ function addNode(
 
 function addArc(
     source= undefined,
-    destination=undefined){
+    destination=undefined,
+    arcclass = null){
 
         if( !(source && destination)||
             (destination.type=='block' && constants.block.singleInput &&
@@ -925,7 +932,8 @@ function addArc(
 
             var newArc = {
                 src: source,
-                dst: destination
+                dst: destination,
+                class: arcclass
             };
             edges.push(newArc);
             updateGraph();
