@@ -1,20 +1,21 @@
+
+//git push https://bitbucket.org/emil-d/graph-gen-lib master
+
 (function(global, factory){
 
+    //if  in a server env (as Node.js) AMD module
     if (typeof define === 'function' && define.amd) {
-        // AMD
-        define(['exports','d3'], factory); 
+    define(['exports'], factory);
     } else if (typeof exports === 'object') {
-        // Node, CommonJS-like
-        factory(exports, require('d3')); 
-    } else {    
-        // Browser globals
-        (factory((global.ggen = global.ggen || {}), global.d3));
-    }   
-    
-}(this, (function(exports, d3){	'use strict';
+    factory(exports);
+    } else {
+    //global.ggen = factory(global.d3);
+    (factory((global.ggen = global.ggen || {})));
+    }
 
-// GGEN is a library in development, code is still to be cleaned and optimized.
-var version = "1.0.1";
+}(this, (function(exports){	'use strict';
+
+var version = "0.3.0";
 
 // Obtain basic information about document and window
 var docEl = document.documentElement,
@@ -23,57 +24,76 @@ var docEl = document.documentElement,
 var canvaswidth = window.innerWidth || docEl.clientWidth || bodyEl.clientWidth,
     canvasheight =  window.innerHeight || docEl.clientHeight|| bodyEl.clientHeight;
 
-// list of nodes and list of connection between nodes
-var nodes = [];
-var edges = [];
-
-//paths and blocks group to be appended to the "graphClass" group
-var paths;
-var blocks;
-
 // Define some useful constants
 var constants =  {
+    selectedClass: "selected",
     graphClass: "graph",
     nodeClass: "node-group",
     arcClass: "arc-group",
+    canvasID: "mainSVG",
+    draggingClass: "drag-active",
     clickableClass: "clickable",
     wellsClass:"wells",
     circleNodeClass:"circlenode",
+    BACKSPACE_KEY: 8,
+    DELETE_KEY: 46,
+    ENTER_KEY: 13,
     binaryGraph:false,
     draggableGraph: true,
-    zoomableGraph: true, //false
-    zoomScale: [0.5,5],
-    start: { class:"strt-nd", width:50, height:50, deletable:false, draggable:false,
+    zoommableGraph: false,
+    zoomScale: [0.7,3],
+    start: { class:"strt-nd", width:60, height:60, deletable:false, draggable:false,
             clickable:true, customFunction1Enabled: true },
-    end: { class:"strt-nd", width:50, height:50, deletable:true, draggable:false,
+    end: { class:"strt-nd", width:60, height:60, deletable:true, draggable:false,
             clickable:true,singleInput:false, customFunction1Enabled: true, 
             nodeSingleParent:true},
-    block: { class:"block", width:180, height:120, marginl:10, marginr:10, //width:240, height:160
-            titleMaxChars:14, trimtext:false,
+    //circle: { class:"strt-nd", width:60, height:60, deletable:false, draggable:false,
+    //        clickable:true, customFunction1Enabled: true },
+    block: { class:"block", width:240, height:160, marginl:10, marginr:10,
             iconsize:25, icon1:"fas fa-cog", icon2:"fas fa-times-circle",
             deletable:true, draggable:false, clickable:true, singleInput:true,
             customFunction1Enabled:true, customFunction2Enabled:true,
-            customFunction3Enabled:true, nodeSingleChild:false },
-    offsety: 90, // 130, //180,
+            customFunction3Enabled:true, nodeSingleChild:true },
+    offsety: 130, //180,
     duration: 750   //of transactions
 };
 
 // state of the graph
 var state = {
     selectedNode: null,
-    //pointer to end node to avoid searching the nodes array
-    endNode: null,
+    //selectedEdge: null,
+    //mouseDownNode: null,
+    //mouseDownLink: null,
+    //justScaleTransGraph: false,
+    //lastKeyDown: -1,
+    //shiftNodeDrag: false,
+    //selectedText: null,
     currentID: 0,
-    graphVersion:0,
-    debug:false,
-    zoom:null
+    graphVersion:0
 };
+
+// list of nodes
+var nodes = [];
+
+//list of connection between nodes
+var edges = [];
+
+//pointer to end node to find it without
+//searching the nodes array
+var endNode = null; 
+
+//paths and blocks group to be appended to the "graphClass" group
+var paths;
+var blocks;
+
+//error messages
+var errlog = "-- error log --";
 
 var settings = null;
 
 //Define some settings to configure the library
 function defineSettings(cwidth, cheight){
-    if(state.debug) console.log(" setting redefinition for w: ",cwidth," h: ",cheight);
+    console.log(" setting redefinition for w: ",cwidth," h: ",cheight);
     canvaswidth = cwidth;
     canvasheight = cheight;
     settings = {
@@ -104,53 +124,6 @@ function defineSettings(cwidth, cheight){
 
 }
 
-// ----  setter ----
-
-function setNodeSize(size=null,type="block"){
-    if(type=="block" && size!=null){
-        if(size.height!=undefined && Number.isInteger(size.height))
-            constants.block.height = size.height;
-        if(size.width!=undefined && Number.isInteger(size.width))
-            constants.block.width = size.width;
-        if(size.offsetx!=undefined && Number.isInteger(size.offsetx)){
-            constants.block.marginl = size.offsetx/2;
-            constants.block.marginr = size.offsetx/2;
-        }           
-    }else if(type=="start" && size!=null 
-            && size.width!=undefined && Number.isInteger(size.width)){
-        constants.start.height = size.width;
-        constants.start.width = size.width;
-    }else if(type=="end" && size!=null
-            && size.width!=undefined && Number.isInteger(size.width)){
-        constants.end.height = size.width;
-        constants.end.width = size.width;
-    }
-    if(size!=null && size.offsety!=undefined && Number.isInteger(size.offsety)){
-        constants.offsety = size.offsety;
-    }   
-}
-
-function setTrimText(trimtrue, chars){
-    if(trimtrue==true )
-        constants.block.trimtext=true;
-    else if(trimtrue==false)
-        constants.block.trimtext=false;
-    if(chars!=undefined && Number.isInteger(chars))
-        constants.block.titleMaxChars=chars;
-}
-
-function zoomIn(){
-    var zoom = state.zoom;
-    var svg = d3.select("svg");
-    svg.transition().call(zoom.scaleBy, 1.5)
-}
-
-function zoomOut(){
-    var zoom = state.zoom;
-    var svg = d3.select("svg");
-    svg.transition().call(zoom.scaleBy, 0.5)
-}
-
 function setBinary(binary=true){
     if(binary!=false &&binary!=true)
         return;
@@ -173,43 +146,34 @@ function setCircleBlocks(circle=true){
     settings.block.shape= circle==true ? "circle" : "rect";
 }
 
-function setDragAndZoom(draggable, zoomable){
-    //if(draggable==true || draggable==false)
-    constants.draggableGraph = draggable==true ? true : draggable==false ? false : constants.draggableGraph;
-    //if(zoomable==true || zoomable==false)
-    constants.zoomableGraph = zoomable==true ? true : zoomable==false ? false : constants.zoomableGraph;
-}
-
-function setNodeSpacing(offsetX, offsetY){
-    if(offsetY>0 && offsetY<500 && offsetX>0 && offsetX < 500)
-    constants.offsety = offsetY;
-    constants.block.marginl = offsetX/2;
-    constants.block.marginr = offsetX/2;
-}
-
 function currentSelectedNode(node=null){
     if(node!=null && nodes.includes(node))
         state.selectedNode=node;
     return state.selectedNode;
 }
 
+
 function initCanvas(container="default"){
 
-    if(state.debug) console.log("initCanvas: "+ canvaswidth)
+    console.log("initCanvas: "+ canvaswidth)
 
-    if (!window.d3){    //check if d3.js is loaded or not
-        if(state.debug) console.log("\nIn order to use ggen library 'd3.js' must be included");
+    //check if d3.js is loaded or not
+    if (!window.d3){
+        alert("In order to use ggen library 'd3.js' must be included");
         return;
     }
 
+    //TODO --> change the body in the selected element or element passed to initCanvas! and height and width are the one of the parent of svg!
    var svg;
    if(container=="default"){
+
         svg = d3.select("body").append("svg")
             .attr("width", canvaswidth)
             .attr("height", canvasheight);
             //.attr("id", constants.canvasID);
         defineSettings(canvaswidth, canvasheight);
    }else{
+        
         var svg = d3.select(container).append("svg")
                 .attr("width", "100%")
                 .attr("height", "100%");
@@ -217,32 +181,19 @@ function initCanvas(container="default"){
         //document.getElementById(container).offsetWidth;
         var elheight = d3.select(container).node().offsetHeight;
         //document.getElementById(container).offsetHeight;
-        if(state.debug) console.log(" SVG appended at ", container, "with dimension w: ",elwidth," h: ",elheight);
+        console.log(" SVG appended at ", container, "with dimension w: ",elwidth," h: ",elheight);
         defineSettings(elwidth, elheight);        
    }
+
 
 	//append a group g element to the svg giving to each members of the group a class
     var svgG = svg.append("g").classed(constants.graphClass, true);
 
     //panning and zoom
-    var scaleExt = [1,1];
-    if(constants.zoomableGraph) scaleExt =constants.zoomScale;
-
-   //svg call zoom
-   state.zoom = d3.zoom()
-      .scaleExtent(scaleExt) //[0.8, 20]
-      .on("zoom", d =>{svgG.attr("transform", d3.event.transform);});
-   svg.call(state.zoom);
-
-    /*
-    state.zoom = d3.zoom().scaleExtent(scaleExt);
+    var scaleExt =[1,1];
+    if(constants.zoommableGraph) scaleExt =constants.zoomScale;
     if( constants.draggableGraph){
-
-        //svgG.style("transform-origin", "50% 50% 0");
-        svg.call(
-            state.zoom
-            //.translateExtent([scaleExt,scaleExt])
-            .extent([[0, 0], [canvaswidth, canvasheight]])
+        svg.call(d3.zoom().scaleExtent(scaleExt)
             .on('start.mousedown', function(){
                 //svg.classed("dragging",true);
             }).on('zoom', function () {
@@ -250,9 +201,7 @@ function initCanvas(container="default"){
             }).on('end', function(){
                 //svg.classed("dragging",false);
             }));
-            
     }
-    */
 
     // svg nodes and edges groups
     paths = svgG.append("g")
@@ -261,18 +210,36 @@ function initCanvas(container="default"){
                         .attr('id','blocks');
 
     if(!window.indexedDB){
-        if(state.debug) 
-            console.log("Your browser doesn't support a stable version of IndexedDB. Such feature will not be available.");
+        console.log("browser do not support indexed db ");
+        errlog+="\nYour browser doesn't support a stable version of IndexedDB. Such and such feature will not be available.";
         settings.noIndexedDB = true;
     }
+    console.log("noindexedDB: "+ settings.noIndexedDB);
+    if(settings.noIndexedDB){
 
-    if(!settings.noIndexedDB){
+        // do not consider indexedDB, initialize the graph
+        //console.log("no indexed db ");
+
+/*
+        var xLoc = canvaswidth/2,
+            yLoc = 100;
+            console.log("x -> "+xLoc);
+        nodes = [{title: "+", type:"starter", id: 0, x: xLoc, y: yLoc},
+                    {title: "new concept", id: 1, x: xLoc, y: yLoc + 200}];
+        console.log("nodes: "+nodes[1].title);
+        edges.push({source: nodes[1], target: nodes[0]}); //= [{source: nodes[1], target: nodes[0]}];
+        console.log("edg: "+edges[0].source.title);
+*/
+    }else{
         // if in indexed DB there is already a graph
         // load that graph
-        //if(state.debug) console.log("init from indexed db ");
+        //console.log("init from indexed db ");
+
     }
 
+    //console.log( " --- canvas initialized --- ");
     updateGraph();
+
 }
 
 
@@ -283,32 +250,20 @@ function moveNodesRecursive(node, offset){
         || (node.type=='block' && node.input.length==4  && node.parent.length>1)
     ){  
         
-        if(node.parent.lenght==2
-            ||!(node.type=='block' && node.input.length==4)){
-            if(node.parent[1].x>node.parent[0].x)
-                offset=offset-(node.parent[1].x-node.parent[0].x)/2;
-            else
-                offset=offset-(node.parent[0].x-node.parent[1].x)/2;
-        }
-     
-        //search the lowest parent y  and the leftmost and rightmost(for 4input case)      
-       let posy=0;
-       let leftmostparentx=canvaswidth;
-       let rightmostparentx=0;
-       node.parent.forEach(function(d){
-            if(d.y+d.size.height>posy)
-               posy=d.y+d.size.height;
-            if(d.x<leftmostparentx)
-               leftmostparentx=d.x;  
-            if(d.x>rightmostparentx)
-               rightmostparentx=d.x;        
-       });
-       node.y = posy + constants.offsety; 
-       if(node.type=='block' && node.input.length==4){
-            offset=offset-(rightmostparentx-leftmostparentx)/2;
-            console.log("leftmostparent ",leftmostparentx," position ",node.x," offset ",offset);
-       }
+        if(node.parent[1].x>node.parent[0].x)
+            offset=offset-(node.parent[1].x-node.parent[0].x)/2;
+        else
+            offset=offset-(node.parent[0].x-node.parent[1].x)/2;
+        
 
+        //search the lowest parent y
+        var posy=0;
+        node.parent.forEach(function(d){
+            if(d.y+d.size.height>posy)
+                posy=d.y+d.size.height;
+        });
+        node.y = posy + constants.offsety;
+        
     }
    
     for(var i=0; i<node.children.length; i++){
@@ -318,20 +273,22 @@ function moveNodesRecursive(node, offset){
             ||( node.children[i].type=='block'
                 && node.children[i].input.length==4  
                 && node.children[i].parent.length>1 
-                && node.children[i].parent[0]!=node)
+                && node.children[i].parent[1]==node)
             )
             continue;
         moveNodesRecursive(node.children[i],offset);
     }
+    
     node.x += offset;
 }
 
-// ------ compute node positions and----------- 
-// -------use D3 JOIN UPDATE PATTERN-----------
+
 function updateGraph(){
-	
+
+	// ---------- update NODES -----------
     if(nodes!=null && nodes.length!=0){
-		
+		//nodes[0].x=0;
+        
         if(!settings.useAlternativeAlgorithm)
             VDPtreeLayout(nodes[0]);
         
@@ -341,16 +298,19 @@ function updateGraph(){
 		var rootWidth = nodes[0].size.width;
         var a = canvaswidth/2 + rootWidth/2;
         var b = rootX + rootWidth;
+
         moveNodesRecursive(nodes[0],(a-b));
 
-        if(state.endNode!=null && state.endNode.parent.length>1){
+
+        if(endNode!=null && endNode.parent.length>1){
+
             //search the lowest parent y,
             //the further-from-the-origin parent x
             //and the closest-to-origin parent x
             var posy=0;
             var xnear=canvaswidth;
             var xfar=0;
-            state.endNode.parent.forEach(function(d){
+            endNode.parent.forEach(function(d){
                 if(d.y+d.size.height>posy)
                     posy=d.y+d.size.height;
                 if(d.x<xnear)
@@ -358,28 +318,36 @@ function updateGraph(){
                 if(d.x>xfar)
                     xfar = d.x;
             });
-            state.endNode.y = posy + constants.offsety;
-            state.endNode.x = xnear + (xfar-xnear)/2 - state.endNode.size.width/2;
+            endNode.y = posy + constants.offsety;
+            endNode.x = xnear + (xfar-xnear)/2 - endNode.size.width/2;
+
         }
 
 	}
 
+    //console.log(nodes);
+
     // node update selection: existing nodes
     var el_up = blocks.selectAll("g."+constants.nodeClass)
                     .data(nodes, function(d){ return d.id; });
-    // node enter selection: new nodes
+    // node enter selection: existing nodes
     var el_en = el_up.enter().append("g")
                     .classed(constants.nodeClass, true);
+                    //.attr("class", function(d){ //.attr will overwrite the class list
+                    //    return d.class;
+                   // });
 
     //give each new element a personalized class
     el_en.each(function(d) {
-        this.classList.add("node"+d.id);
-        if(d.class.nodeclass!=undefined)
-            this.classList.add(d.class.nodeclass);
+        if(d.class!=undefined)
+            this.classList.add(d.class);
       });
     
+
     // Transition update selection: old nodes to their new position.
-    var el_up_tr = el_up
+    var el_up_tr = el_up/*.filter( function(d){
+            return d.type  != 'start' && d.type!='end';
+        })*/
         .transition()
         .duration(constants.duration)
         .attr("transform", function(d) {
@@ -387,14 +355,13 @@ function updateGraph(){
             return "translate(" + d.x + "," + d.y + ")";
         });
 
-/*  // ---- DEBUG ----
-if(state.debug){
-        console.log("update: ");
+// ---- DEBUG ----
+/*
+    console.log("update: ");
     el_up.each( function(i){
         console.log(i);
     });
-}*/
-
+*/
     //start and end enter selection
     var strt_nd_en = el_en.filter( function(d){
             return d.type == 'start' || d.type == 'end';
@@ -430,6 +397,7 @@ if(state.debug){
         });
     // move strt-end group to initial position
     strt_nd_en.attr("transform", function(d){
+            //console.log("initially in x "+ d.x0 +" y "+d.y0);
             return "translate(" + d.x0+ ", "+ d.y0 +" )";
         });
 
@@ -455,6 +423,7 @@ if(state.debug){
                 else return false;
             }).on('click', function(d){ return customBlockFunction3(d); });
         blks_en.attr("transform", function(d){
+                //console.log("initially in x "+ d.x0 +" y "+d.y0);
                 return "translate(" + d.x0+ ", "+ d.y0 +" )";
             });
     }else{
@@ -474,16 +443,14 @@ if(state.debug){
                 .classed(constants.clickableClass, function(){
                     if(constants.block.clickable==true) return true;
                     else return false;
-                }).on("click", function(d){ return customBlockFunction3(d);});
-
-        blks_en.append("text")
+                }).on('click', function(d){ return customBlockFunction3(d);});
+        blks_en.append('text')
             .attr("class", "node-title")
             .attr("font-family","sans-serif")
             .attr("font-size","0px")
             .attr("fill","steelblue")
             .attr("text-anchor", "middle")
             .attr("dominant-baseline","central");
-
         //append icon1 to node block and give it custom functions
         blks_en.append("text")        // Append a text element
             .attr("class", function(){ return constants.block.icon1; })  // Give it the font-awesome class
@@ -509,6 +476,7 @@ if(state.debug){
                 else return false;
             }).on('click', function(d){return customBlockFunction2(d);});
         blks_en.attr("transform", function(d){
+            //console.log("initially in x "+ d.parent[0].output.x +" y "+d.parent[0].output.y);
             return "translate(" +d.x0+ ", "+d.y0+" )";
         });
 
@@ -533,9 +501,8 @@ if(state.debug){
     
     }  
 
-
-/*  // ---- DEBUG ------
-if(state.debug){
+// ---- DEBUG ------
+/*
     console.log("enter blks: ");
     blks_en.each( function(i){
         console.log(i);
@@ -544,7 +511,7 @@ if(state.debug){
     strt_nd_en.each( function(i){
         console.log(i);
     });
-} */
+*/
 
     //transition enter selection: move new nodes to their new position
     var strt_nd_tr = strt_nd_en.transition()
@@ -575,9 +542,7 @@ if(state.debug){
            });
         blks_tr.select('text')
            .attr("font-size","20px")
-           .text(function(d){ 
-                return d.title;
-            });        
+           .text(function(d){ return d.title});        
     }else{
         //blocks selection entering transition (applied to the group)
         blks_tr.attr("transform", function(d) {
@@ -590,12 +555,7 @@ if(state.debug){
             .attr("font-size","20px")
             .attr("x", function(d){ return d.size.width/2; })
             .attr("y", function(d){ return d.size.height/2; })
-            .text(function(d){
-                if(constants.block.trimtext)
-                    return trimText(d.title,constants.block.titleMaxChars); 
-                else
-                    return d.title;
-            });
+            .text(function(d){ return d.title});
         blks_tr.select('text.fa-cog')
             .attr("font-size", function(d){ var v=d.size.iconsize; return v.toString(); })
             .attr("x", function(d){ return d.size.iconsize; })
@@ -673,12 +633,6 @@ if(state.debug){
     var path_en = path_up.enter().append("g")
         .attr("class", "arc-group");
 
-    //give each new path a personalized class
-    path_en.each(function(d) {
-        if(d.class!=undefined)
-            this.classList.add(d.class);
-      });
-
     // add new paths
     // draw the new line/edges
     if(settings.edge.shape!="curve"){
@@ -695,8 +649,8 @@ if(state.debug){
          );
     }
 
-    /*  // ---- DEBUG ------
-    if(state.debug){
+    // ---- DEBUG ------
+    /*
         console.log("update paths: ");
         path_up.each( function(i){
             console.log(i);
@@ -705,7 +659,7 @@ if(state.debug){
         path_en.each( function(i){
             console.log(i);
         });
-    } */
+    */
 
     //path transition
     if(settings.edge.shape!="curve"){
@@ -745,10 +699,21 @@ if(state.debug){
     // remove eliminated/old paths
     path_up.exit().remove()
 
+
     // remove old/eliminated nodes
     el_up.exit().remove();
 
+    // Stash the old positions for transition.
+/*    nodes.forEach(function(e){
+        if(e.parent!=null){
+            e.x0 = e.parent[0].x;
+            e.y0 = e.parent[0].y;
+        }
+    });
+*/
     state.graphVersion++;
+    console.log("--------------end update----------------");
+
 }
 
 // functions to add nodes
@@ -756,7 +721,7 @@ function addNode(
     type= "block",
     title= "node title",
     parent = null,
-    nodeclass = null, //object containing both a class for the node and its connecting arc (.nodeclass e .arcclass)
+    nodeclass = null,
     numInputs = null,
     x = null,
     y = null,
@@ -764,32 +729,35 @@ function addNode(
     y0= null
     ){
 
+    //console.log("adding a node (type: "+type+ " -name: "+name+" -title: "+title);
+
     //integrity and constraints checks 
     if(  (type == "start" && settings.noStartNode)
         || (type!="start" && ( parent==null || parent.id==null || parent.id<0))
     ){
 
-        if(state.debug) console.log( parent!=null && parent.id==null ? " -- ERR start" : " -- ERR parent node deleted");
+        console.log( parent!=null && parent.id==null ? " -- ERR start" : " -- ERR parent node deleted");
 
     }else if(type!='start' && parent.children.length!=0 &&
                 (parent.children[0].type=='end' || parent.children[0].type=='operator')
             ){
 
-        if(state.debug) console.log(" -- ERR cannot add a child to a node connected to end or an operator");
+        console.log(" -- ERR cannot add a child to a node connected to end or an operator");
+        //console.log(" -- ERR an operator cannot have siblings");
 
     }else if(type!='start' && parent.type=="operator" && parent.children.length > 0){
-        if(state.debug) console.log(" -- ERR an operator can have just one child");
+        console.log(" -- ERR an operator can have just one child");
 
     }else if(type == "end" && settings.noEndNode){
 
-        if(state.debug) console.log(" -- ERR end");
+        console.log(" -- ERR end");
 
     }else if( constants.binaryGraph==true && parent!=null && parent.children.length>1){
-        if(state.debug) console.log(" -- ERR binary graph!");
+        console.log(" -- ERR binary graph!");
     }else if( constants.block.nodeSingleChild == true 
             && parent!=null && parent.type!="start"
             && parent.children.length>0 ){
-                if(state.debug) console.log(" -- ERR Node can only have one child!");
+        console.log(" -- ERR Node can only have one child!");
     }else{
         var newNode = {
                 id: type=="start" ? 0 : ++state.currentID,
@@ -797,7 +765,7 @@ function addNode(
                 title: title,
                 parent: type=="start" ? null : [parent],
                 children: [],
-                class: nodeclass!=null ? nodeclass : {nodeclass: constants.nodeClass},
+                class: nodeclass!=null ? nodeclass : constants.nodeClass,
                 size: { width: type=="start" ? constants.start.width :
                                type=="end" ? constants.end.width :
                                settings.block.shape=="circle" ? constants.start.width :
@@ -880,7 +848,7 @@ function addNode(
 		}
         nodes.push(newNode);
         if(type!="start" && parent!=null){
-            addArc(parent,newNode, nodeclass!=null&&nodeclass.arcclass!=undefined ? nodeclass.arcclass : null);
+            addArc(parent,newNode);
         }else{
             updateGraph();
         }
@@ -891,9 +859,8 @@ function addNode(
 
 
 function addArc(
-    source = undefined,
-    destination = undefined,
-    arcclass = null){
+    source= undefined,
+    destination=undefined){
 
         if( !(source && destination)||
             (destination.type=='block' && constants.block.singleInput &&
@@ -901,7 +868,7 @@ function addArc(
                 destination.parent.length>0 && destination.parent[0]!=source)||
             (destination.type=='operator' && destination.parent.length==2)
         ){
-            if(state.debug) console.log(" -- ERR ARC");
+            console.log(" -- ERR ARC");
         }else{
 
             if( (destination.type=='operator' 
@@ -913,13 +880,12 @@ function addArc(
                 if(destination.parent[0].x>source.x){
                     var tmpconfig = destination.config;
                     var tmpdata = destination.data;
-                    var tmpclass = destination.class;
                     removeNode(destination);
-                    var op = addNode(type="operator", title=tmpdata.name, parent = source, tmpclass);
+                    var op = addNode(type="operator", title=tmpdata.name, parent = source);
                     op.data=tmpdata;
                     op.config=tmpconfig;
                     
-                    addArc(destination.parent[0],op,tmpclass.arcclass!=undefined ? tmpclass.arcclass : null);
+                    addArc(destination.parent[0],op);
                     return;
                 }else
                     destination.parent.push(source);
@@ -998,9 +964,9 @@ function addArc(
 
             var newArc = {
                 src: source,
-                dst: destination,
-                class: arcclass
+                dst: destination
             };
+            console.log('------ new arc!! ----- ');
             edges.push(newArc);
             updateGraph();
         }
@@ -1028,23 +994,17 @@ function removeParentChildren(t){
         });
     }
     t.children = t.children.filter( function(e){ return e.id!=-1; });
-    if(t.parent!=null && t.parent.length>0){
-
-        for(let i=0; i<t.parent.length; i++){
-            t.parent[i].children = t.parent[i].children.filter( function(e){ return e.id!=-1; });
-        }
-        /*
+    if(t.parent!=null){
         t.parent[0].children = t.parent[0].children.filter( function(e){ return e.id!=-1; });
         if(t.parent.length>1)
             t.parent[1].children = t.parent[1].children.filter( function(e){ return e.id!=-1; });
-        */
     } 
     return;
 }
 
 function removeNode(t){
     if(t==null){
-        if(state.debug) console.log(" -- - ERR removenode -- -");
+        console.log(" -- - ERR removenode -- -");
         return;
     }
 
@@ -1053,56 +1013,70 @@ function removeNode(t){
     removeSubtree(t);
     removeParentChildren(t);
 
-    if(state.endNode!=null && state.endNode.id==-1)    state.endNode=null;
+    
+
+    if(endNode!=null && endNode.id==-1)    endNode=null;
 
     //filter nodes
     nodes = nodes.filter( function(e){ return e.id!=-1; });
+
     edges = edges.filter(function(e){ return e.src.id!=-1 && e.dst.id!=-1});
+    //console.log("remove node");
+    //console.log(nodes);
 
     updateGraph();
+
 }
 
 function connectNodeToEnd(n){
 
-    if(state.debug) console.log("-- connect to end ",n);
+    console.log("-- connect to end ",n);
 
     if(n==null || n.type=='end' || n.children.length>0)
         return false;
 
-    if(state.endNode!=null && state.endNode.type=='end'){
+    if(endNode!=null && endNode.type=='end'){
         //if end already exists
-        if(state.debug) console.log("-- end already exists ");
+        console.log("-- end already exists ");
 
         if( constants.end.nodeSingleParent==false){
             //add an arc to end node
             //cannoat add child to node n
-            n.children.push(state.endNode);
+            n.children.push(endNode);
 
             //add parent to node end
-            state.endNode.parent.push(n);
+            endNode.parent.push(n);
 
             //add arc between them
-            addArc(n, state.endNode);
+            addArc(n, endNode);
         }else{
-            return false; //one node already connected to end   
+            return false;
+            //console.log("-- ERR no more than one node can be connected to end ");   
         }
             
     }else{
         //if end does not exists add it
-        if(state.debug) console.log("-- end does not exists ");
-        state.endNode = addNode(type="end", title="0", parent = n);
+        console.log("-- end does not exists ");
+
+        endNode = addNode(type="end", title="0", parent = n);
+        console.log(endNode);
     }
 
-    return state.endNode;
+    return endNode;
 }
 
+
+
+
 /* --- Functions from  A.J. van der Ploeg algorithm --- */
-
 function VDPtreeLayout(t){
-    if(state.debug) console.log("\t ---- VDP alg -----");
+    console.log("\t ---- VDP alg -----");
     VDPfirstWalk(t);
+    //console.log(t);
 
-    if(state.debug) console.log("\t ---- second walk -----");
+    //FUNCTIONING SECOND WALK
+    console.log("\t ---- second walk -----");
+    
     VDPsecondWalk(t,0);
 }
 
@@ -1119,7 +1093,7 @@ function VDPfirstWalk(t){
     }
     VDPfirstWalk(t.children[0]);
     //create sibling in contour minimal vertical coordinate and index list
-    let ih = VDPupdateIYL(VDPbottom(t.children[0].subtree.el), 0, null);
+    var ih = VDPupdateIYL(VDPbottom(t.children[0].subtree.el), 0, null);
 
     for(var i=1; i< t.children.length; i++){
         VDPfirstWalk(t.children[i]);
@@ -1146,11 +1120,6 @@ function VDPsetExtremes(t){
 }
 
 function VDPseparate(t, i, ih){
-
-    //if(ih == null){
-       //console.log("wait i "+i+ " node "+t);
-    //}
-
     //right contour node of left sibling and its sum of modifier.
     var sr = t.children[i-1];
     var mssr = sr.subtree.mod;
@@ -1159,26 +1128,15 @@ function VDPseparate(t, i, ih){
     var mscl = cl.subtree.mod;
 
     while(sr!=null && cl!= null){
-        if(ih==null){ 
-            if(state.debug) console.log("VDP ERR 1");
-        }else
-        //if(ih.low==undefined || VDPbottom(sr) > ih.lowY){
-        if(VDPbottom(sr) > ih.lowY){
-            if(ih.nxt == null){
-                console.log("ih.nxt is null; i "+i+" lvl "+t.data.height+" node ",t);
-            }
+        if(VDPbottom(sr) > ih.lowY )
             ih = ih.nxt;
-            //ih = ih.low==undefined ? null : ih.nxt;
-        }
-
         //how far to the left of the right side of r is the left side of cl?
         var dist = (mssr + sr.subtree.prelim + sr.subtree.w)-(mscl+cl.subtree.prelim);
         if(dist > 0){
             mscl += dist;
-            if(ih==null){   
-                //if(state.debug) console.log("VDP ERR 2 - i "+i+"lvl "+t.data.height+" t ",t);
-               // VDPmoveSubtree(t, i, i-1, dist);
-            }else
+            if(ih==null) 
+                console.log("VDP ERR");
+            else
                 VDPmoveSubtree(t, i, ih.index, dist);
         }
         var sy = VDPbottom(sr), cy = VDPbottom(cl);
@@ -1204,6 +1162,7 @@ function VDPmoveSubtree(t, i, si, dist){
     t.children[i].subtree.mod += dist;
     t.children[i].subtree.msel += dist;
     t.children[i].subtree.mser += dist;
+    //console.log("movesubtree mod " + dist);
     VDPdistributeExtra(t,i,si,dist);
 }
 
@@ -1216,12 +1175,15 @@ function VDPnextRightContour(t){
 }
 
 function VDPbottom(t){
+    //console.log("vdp bottom "+(t.y+t.size.height));
     return t.y + t.size.height;
 }
 
 function VDPsetLeftThread(t, i, cl, modsumcl){
     var li = t.children[0].subtree.el;
     li.subtree.tl = cl;
+    //console.log("thread left");
+    //console.log(li.subtree.tl);
     //change mod so that the sum of modifier after following thread is correct
     var diff = (modsumcl - cl.subtree.mod)-t.children[0].subtree.msel;
     li.subtree.mod += diff;
@@ -1250,11 +1212,17 @@ function VDPpositionRoot(t){
                         t.children[t.children.length-1].subtree.prelim +
                         t.children[t.children.length-1].subtree.w
                     )/2 - t.subtree.w/2;
+    //console.log("positionROOT: "+t.subtree.prelim);
+    //console.log("width "+t.subtree.w);
 }
 
 function VDPsecondWalk(t, modsum){
-    modsum += t.subtree.mod; 
+//	var centermod=0;
+//	if(root.el!=null)
+//		centermod = (root.x-root.el.x);
+    modsum += t.subtree.mod; //+centermod
     // set absolute (non-relative) horizontal coordinate
+    //console.log("id "+t.id+" "+"t.x= "+(t.subtree.prelim + modsum));
     t.x = t.subtree.prelim + modsum + t.size.marginl;
     VDPaddChildSpacing(t);
     for(var i=0; i<t.children.length; i++)
@@ -1314,7 +1282,8 @@ function setCustomFunction(f, type=null, i=1, arg=null){
         customBlockFunction2 = f;
     else if ( (type=="block"||type=="operator" )&& i==3 && constants.block.customFunction3Enabled )
         customBlockFunction3 = f;
-    else if(state.debug) console.log("customizable function disabled");
+    else
+        errlog+="customizable function disabled\n";
 }
 
 function customStartFunction1(d){
@@ -1362,7 +1331,9 @@ function stringifyGraphJSON(){
             d.subtree.tr = d.subtree.tr!=null ? d.subtree.tr.id : null;
             return d;
         });
-   
+
+    //console.log("nodes decycled ----->", nodes_decycled);
+    
     var edges_decycled = edges.map( function(f){
             var d = Object.assign({}, f);
             d.src = d.src.id;
@@ -1372,6 +1343,7 @@ function stringifyGraphJSON(){
 
     var jsobj = window.JSON.stringify({"nodes": nodes_decycled,
                                 "edges": edges_decycled});
+    //debugger;
     return jsobj;
 }
 
@@ -1384,7 +1356,7 @@ function parseGraphJSON(jsobj){
         nodes = jsonObj.nodes.map( function(d){
 
                 if(d.type=='end')
-                    state.endNode =d;
+                    endNode =d;
                 
                 d.children = d.children!=null ? d.children.map(function(c){
                     return jsonObj.nodes[c];
@@ -1460,9 +1432,10 @@ function loadGraphJSON(){
     i.onchange = function(e){
         var input = e.target;
         if ('files' in input && input.files.length > 0) {
-            
+            //debugger;
             var file = input.files[0];
             readFileContent(file).then(content => {
+                
                 parseGraphJSON(content);
             });
         }
@@ -1475,6 +1448,7 @@ function loadGraphJSON(){
 
 function getJsonStrGraph(){
     //build and return a jsonStrGraph, following las query module template
+    console.log("build and return a jsonStrGraph");
     var strGraph = {};
     
     nodes.forEach(n => {
@@ -1496,7 +1470,7 @@ function getJsonStrGraph(){
                 if(c.type=="end")
                     n.config.w_out.push("end");
                 else
-                    n.config.w_out.push(""+c.id+".0");
+                    n.config.w_out.push(""+c.id);
             });
         }
 
@@ -1539,6 +1513,12 @@ function triggerAlternativeAlgorithm(){
         nodes.forEach(n =>{
             if(n.data.height>maxheight) maxheight=n.data.height;
         });
+        /*nodes = nodes.map(n =>{
+            if(n.data.height>maxheight) maxheight=n.data.height;
+            n.x=0;
+            n.y=0;
+            return n;
+        });*/
 
         //compute the x, y position with the algorithm
         if(settings.algorithm=='WS')
@@ -1555,7 +1535,11 @@ function triggerAlternativeAlgorithm(){
             if(settings.algorithm=='RT'){
                 d.x = d.x + Math.abs(minx);
                 d.x = d.x * (constants.start.width + 10);
-                d.y = (d.y+1) * constants.start.width;
+                d.y = d.y * constants.start.width;
+                /*if(d.y==0) 
+                    d.y = (d.y+1) * constants.start.width;
+                else
+                    d.y = (d.y+2) * constants.start.width;*/
             }
 
             return d;
@@ -1569,27 +1553,13 @@ function clearGraph(){
     removeNode(nodes[0]);
 }
 
-function getNextNodeId(){
-    return state.currentID+1;
-}
 
-// manage text ellipses
-function trimText(text, threshold) {
-    if (text.length <= threshold) return text;
-    return text.substr(0, threshold).concat("...");
-}
-
-//return true if node end is present
-function checkEndPresence(){
-    return state.endNode==null ? false : true;
-}
 
 //variables and method that shouldn't be exposed
 //they are exposed just for debugging purpose
 //exports.settings = settings;
 //exports.constants = constants;
 //exports.state = state;
-exports.updateGraph = updateGraph;
 exports.nodes = function(){
     return nodes;
 };
@@ -1597,8 +1567,11 @@ exports.edges = function(){
     return edges;
 };
 exports.endNode = function(){
-    return state.endNode;
+    return endNode;
 };
+//exports.paths = paths;
+//exports.blocks = blocks;
+//exports.errlog = errlog;
 exports.stringifyGraphJSON = stringifyGraphJSON;
 exports.parseGraphJSON = parseGraphJSON;
 exports.graphVersion = state.graphVersion;
@@ -1606,6 +1579,7 @@ exports.graphVersion = state.graphVersion;
 // variables and method that should be exposed
 exports.version = version;
 exports.initCanvas = initCanvas;
+exports.updateGraph = updateGraph;
 exports.addNode = addNode;
 exports.addArc = addArc;
 exports.removeNode = removeNode;
@@ -1614,8 +1588,6 @@ exports.setCustomFunction = setCustomFunction;
 exports.setBinary = setBinary;
 exports.setLinearEdges = setLinearEdges;
 exports.setCircleBlocks = setCircleBlocks;
-exports.setDragAndZoom = setDragAndZoom;
-exports.setNodeSpacing = setNodeSpacing;
 exports.currentSelectedNode = currentSelectedNode;
 exports.getAvailableOperators = getAvailableOperators;
 exports.storeGraphJSON = storeGraphJSON; 
@@ -1624,12 +1596,6 @@ exports.getJsonStrGraph = getJsonStrGraph;
 exports.setAlternativeAlgorithm = setAlternativeAlgorithm;
 exports.triggerAlternativeAlgorithm = triggerAlternativeAlgorithm;
 exports.clearGraph = clearGraph;
-exports.getNextNodeId = getNextNodeId;
-exports.setNodeSize = setNodeSize;
-exports.setTrimText = setTrimText;
-exports.checkEndPresence = checkEndPresence;
-exports.zoomIn = zoomIn;
-exports.zoomOut = zoomOut;
 
 // from d3.js
 //Object.defineProperty(exports, '__esModule', { value: true });
