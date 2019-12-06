@@ -14,7 +14,7 @@
 }(this, (function(exports, d3){	'use strict';
 
 // GGEN is a library in development, code is still to be cleaned and optimized.
-var version = "1.0.0";
+var version = "1.0.1";
 
 // Obtain basic information about document and window
 var docEl = document.documentElement,
@@ -41,15 +41,15 @@ var constants =  {
     circleNodeClass:"circlenode",
     binaryGraph:false,
     draggableGraph: true,
-    zoomableGraph: false,
-    zoomScale: [0.7,3],
+    zoomableGraph: true, //false
+    zoomScale: [0.5,5],
     start: { class:"strt-nd", width:50, height:50, deletable:false, draggable:false,
             clickable:true, customFunction1Enabled: true },
     end: { class:"strt-nd", width:50, height:50, deletable:true, draggable:false,
             clickable:true,singleInput:false, customFunction1Enabled: true, 
             nodeSingleParent:true},
     block: { class:"block", width:180, height:120, marginl:10, marginr:10, //width:240, height:160
-            titleMaxChars:14,
+            titleMaxChars:14, trimtext:false,
             iconsize:25, icon1:"fas fa-cog", icon2:"fas fa-times-circle",
             deletable:true, draggable:false, clickable:true, singleInput:true,
             customFunction1Enabled:true, customFunction2Enabled:true,
@@ -65,7 +65,8 @@ var state = {
     endNode: null,
     currentID: 0,
     graphVersion:0,
-    debug:false 
+    debug:false,
+    zoom:null
 };
 
 var settings = null;
@@ -103,7 +104,53 @@ function defineSettings(cwidth, cheight){
 
 }
 
-// ---  setter
+// ----  setter ----
+
+function setNodeSize(size=null,type="block"){
+    if(type=="block" && size!=null){
+        if(size.height!=undefined && Number.isInteger(size.height))
+            constants.block.height = size.height;
+        if(size.width!=undefined && Number.isInteger(size.width))
+            constants.block.width = size.width;
+        if(size.offsetx!=undefined && Number.isInteger(size.offsetx)){
+            constants.block.marginl = size.offsetx/2;
+            constants.block.marginr = size.offsetx/2;
+        }           
+    }else if(type=="start" && size!=null 
+            && size.width!=undefined && Number.isInteger(size.width)){
+        constants.start.height = size.width;
+        constants.start.width = size.width;
+    }else if(type=="end" && size!=null
+            && size.width!=undefined && Number.isInteger(size.width)){
+        constants.end.height = size.width;
+        constants.end.width = size.width;
+    }
+    if(size!=null && size.offsety!=undefined && Number.isInteger(size.offsety)){
+        constants.offsety = size.offsety;
+    }   
+}
+
+function setTrimText(trimtrue, chars){
+    if(trimtrue==true )
+        constants.block.trimtext=true;
+    else if(trimtrue==false)
+        constants.block.trimtext=false;
+    if(chars!=undefined && Number.isInteger(chars))
+        constants.block.titleMaxChars=chars;
+}
+
+function zoomIn(){
+    var zoom = state.zoom;
+    var svg = d3.select("svg");
+    svg.transition().call(zoom.scaleBy, 1.5)
+}
+
+function zoomOut(){
+    var zoom = state.zoom;
+    var svg = d3.select("svg");
+    svg.transition().call(zoom.scaleBy, 0.5)
+}
+
 function setBinary(binary=true){
     if(binary!=false &&binary!=true)
         return;
@@ -178,10 +225,24 @@ function initCanvas(container="default"){
     var svgG = svg.append("g").classed(constants.graphClass, true);
 
     //panning and zoom
-    var scaleExt =[1,1];
+    var scaleExt = [1,1];
     if(constants.zoomableGraph) scaleExt =constants.zoomScale;
+
+   //svg call zoom
+   state.zoom = d3.zoom()
+      .scaleExtent(scaleExt) //[0.8, 20]
+      .on("zoom", d =>{svgG.attr("transform", d3.event.transform);});
+   svg.call(state.zoom);
+
+    /*
+    state.zoom = d3.zoom().scaleExtent(scaleExt);
     if( constants.draggableGraph){
-        svg.call(d3.zoom().scaleExtent(scaleExt)
+
+        //svgG.style("transform-origin", "50% 50% 0");
+        svg.call(
+            state.zoom
+            //.translateExtent([scaleExt,scaleExt])
+            .extent([[0, 0], [canvaswidth, canvasheight]])
             .on('start.mousedown', function(){
                 //svg.classed("dragging",true);
             }).on('zoom', function () {
@@ -189,7 +250,9 @@ function initCanvas(container="default"){
             }).on('end', function(){
                 //svg.classed("dragging",false);
             }));
+            
     }
+    */
 
     // svg nodes and edges groups
     paths = svgG.append("g")
@@ -310,8 +373,9 @@ function updateGraph(){
 
     //give each new element a personalized class
     el_en.each(function(d) {
-        if(d.class!=undefined)
-            this.classList.add(d.class);
+        this.classList.add("node"+d.id);
+        if(d.class.nodeclass!=undefined)
+            this.classList.add(d.class.nodeclass);
       });
     
     // Transition update selection: old nodes to their new position.
@@ -527,8 +591,10 @@ if(state.debug){
             .attr("x", function(d){ return d.size.width/2; })
             .attr("y", function(d){ return d.size.height/2; })
             .text(function(d){
-                return trimText(d.title,constants.block.titleMaxChars); 
-                //return d.title;
+                if(constants.block.trimtext)
+                    return trimText(d.title,constants.block.titleMaxChars); 
+                else
+                    return d.title;
             });
         blks_tr.select('text.fa-cog')
             .attr("font-size", function(d){ var v=d.size.iconsize; return v.toString(); })
@@ -690,7 +756,7 @@ function addNode(
     type= "block",
     title= "node title",
     parent = null,
-    nodeclass = null,
+    nodeclass = null, //object containing both a class for the node and its connecting arc (.nodeclass e .arcclass)
     numInputs = null,
     x = null,
     y = null,
@@ -731,7 +797,7 @@ function addNode(
                 title: title,
                 parent: type=="start" ? null : [parent],
                 children: [],
-                class: nodeclass!=null ? nodeclass : constants.nodeClass,
+                class: nodeclass!=null ? nodeclass : {nodeclass: constants.nodeClass},
                 size: { width: type=="start" ? constants.start.width :
                                type=="end" ? constants.end.width :
                                settings.block.shape=="circle" ? constants.start.width :
@@ -814,7 +880,7 @@ function addNode(
 		}
         nodes.push(newNode);
         if(type!="start" && parent!=null){
-            addArc(parent,newNode);
+            addArc(parent,newNode, nodeclass!=null&&nodeclass.arcclass!=undefined ? nodeclass.arcclass : null);
         }else{
             updateGraph();
         }
@@ -825,8 +891,8 @@ function addNode(
 
 
 function addArc(
-    source= undefined,
-    destination=undefined,
+    source = undefined,
+    destination = undefined,
     arcclass = null){
 
         if( !(source && destination)||
@@ -853,7 +919,7 @@ function addArc(
                     op.data=tmpdata;
                     op.config=tmpconfig;
                     
-                    addArc(destination.parent[0],op);
+                    addArc(destination.parent[0],op,tmpclass.arcclass!=undefined ? tmpclass.arcclass : null);
                     return;
                 }else
                     destination.parent.push(source);
@@ -1513,6 +1579,11 @@ function trimText(text, threshold) {
     return text.substr(0, threshold).concat("...");
 }
 
+//return true if node end is present
+function checkEndPresence(){
+    return state.endNode==null ? false : true;
+}
+
 //variables and method that shouldn't be exposed
 //they are exposed just for debugging purpose
 //exports.settings = settings;
@@ -1554,6 +1625,11 @@ exports.setAlternativeAlgorithm = setAlternativeAlgorithm;
 exports.triggerAlternativeAlgorithm = triggerAlternativeAlgorithm;
 exports.clearGraph = clearGraph;
 exports.getNextNodeId = getNextNodeId;
+exports.setNodeSize = setNodeSize;
+exports.setTrimText = setTrimText;
+exports.checkEndPresence = checkEndPresence;
+exports.zoomIn = zoomIn;
+exports.zoomOut = zoomOut;
 
 // from d3.js
 //Object.defineProperty(exports, '__esModule', { value: true });
