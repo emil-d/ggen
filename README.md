@@ -77,13 +77,19 @@ The arcs connecting the parent (n0) to the children (n1, n2) will be automatical
 
 * initCanvas( selector ) 
 	The function inserts the SVG canvas where the graph will be rendered.
-	With _selector_ is possible to choose an html element as canvas, otherwise by default the svg canvas will be appnded to the _body_.
+	With _selector_ is possible to choose an html element as canvas, otherwise by default the svg canvas will be appended to the _body_.
 
 ### Graph Drawing Function
 
-* addNode( )
+* addNode(type= "block", title, parent, nodeclass)
+	- type is the kind of node (can be _start_, _end_ or _block_)
+	- title is the name of the node
+	- parent is the Object associated with the parent node
+	- nodeclass is an object {nodeclass:"", arcclass:""} where nodeclass is the CSS class to be assigned to the node, in addition to the _blk+nodeid_ class assigned by default. While arcclass is to be assigned to the arc connecting _parent_ to this node.
 
-* addArc( )
+* addArc( source, destination, arcclass)
+	- source and destination are the object corresponding to source and target node
+	- arcclass is the CSS class to be assigned for styling the arc
 
 ### Utilities
 
@@ -100,8 +106,8 @@ The arcs connecting the parent (n0) to the children (n1, n2) will be automatical
 
 ### Functional Zoom
 
-exports.zoomIn = zoomIn;
-exports.zoomOut = zoomOut;
+* zoomIn
+* zoomOut
 
 ## Bibliograpy
 
