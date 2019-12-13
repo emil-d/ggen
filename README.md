@@ -27,9 +27,9 @@ The library is also capable to draw binary trees using Reingold and Tilford algo
 
 To use the library in your application.
 
-1 set some initial onfiguration
-2 call the initCanvas() method passing to it a selctor for the HTML element where you want the graph to be rendered
-3 start using the function to add/remove nodes and arcs
+1. set some initial onfiguration 
+2. call the initCanvas() method passing to it a selctor for the HTML element where you want the graph to be rendered 
+3. start using the function to add/remove nodes and arcs 
 
 ```javascript
     ggen.initCanvas('#canvas')
@@ -75,7 +75,9 @@ The arcs connecting the parent (n0) to the children (n1, n2) will be automatical
 
 ### Init (mandatory)
 
-* initCanvas( selector )
+* initCanvas( selector ) 
+	The function inserts the SVG canvas where the graph will be rendered.
+	With _selector_ is possible to choose an html element as canvas, otherwise by default the svg canvas will be appnded to the _body_.
 
 ### Graph Drawing Function
 
@@ -103,9 +105,9 @@ exports.zoomOut = zoomOut;
 
 ## Bibliograpy
 
-[1] Ploeg, Atze. (2014). Drawing Non-Layered Tidy Trees In Linear Time. Software: Practice and Experience. 44. 10.1002/spe.2213. 
-[2] Reingold, E.M., & Tilford, J.S. (1981). Tidier Drawings of Trees. IEEE Transactions on Software Engineering, SE-7, 223-228.
-[3] Wetherell, C., & Shannon, A. (1979). Tidy Drawings of Trees. IEEE Transactions on Software Engineering, SE-5, 514-520.
+[1] Ploeg, Atze. (2014). Drawing Non-Layered Tidy Trees In Linear Time. Software: Practice and Experience. 44. 10.1002/spe.2213.  
+[2] Reingold, E.M., & Tilford, J.S. (1981). Tidier Drawings of Trees. IEEE Transactions on Software Engineering, SE-7, 223-228.  
+[3] Wetherell, C., & Shannon, A. (1979). Tidy Drawings of Trees. IEEE Transactions on Software Engineering, SE-5, 514-520.  
 
 ## License
 This project is licensed under the terms of the GNU General Public License v3.0
